@@ -70,7 +70,7 @@ public class Parser {
 		}
 	}
 	
-	// Access ::= static? (TypeReturn | VoidReturn)
+	// Access ::= static? ( ( int ( [] )? | id ( [] )? | Boolean ) TypeReturn | void VoidReturn)
 	private void parseAccess() {
 		if (token.kind == TokenKind.STATIC) {
 			acceptIt();	
@@ -134,7 +134,7 @@ public class Parser {
 		 */
 	}
 	
-	// ParameterList ::= Type id ( , Type id)*
+	// ParameterList ::= ( int ( [] )? | id ( [] )? | Boolean ) id ( , ( int ( [] )? | id ( [] )? | Boolean ) id)*
 	private void parseParameterList() {
 		switch (token.kind) {
 		case INT: case ID:
@@ -166,6 +166,20 @@ public class Parser {
 				parseError("Invalid Term - expecting TYPE but found " + token.kind);
 			}	
 		}	
+	}
+	
+	// Reference ::= ( id | this ) ( . id )*
+	private void parseReference() {
+		switch(token.kind) {
+		case ID: case THIS:
+			acceptIt();
+		default: 
+			parseError("Invalid Term - expecting ID or THIS but found " + token.kind);
+		}
+		while (token.kind == TokenKind.DOT) {
+			acceptIt();
+			accept(TokenKind.ID);
+		}
 	}
 	
 	/**
