@@ -80,9 +80,7 @@ public class Parser {
 			acceptIt();
 			if (token.kind == TokenKind.LBRACKET) {
 				acceptIt();
-			}
-			if (token.kind == TokenKind.RBRACKET) {
-				acceptIt();
+				accept(TokenKind.RBRACKET);
 			}
 			parseTypeReturn();
 		case BOOLEAN:
@@ -143,10 +141,8 @@ public class Parser {
 			acceptIt();
 			if (token.kind == TokenKind.LBRACKET) {
 				acceptIt();
+				accept(TokenKind.RBRACKET);
 			}
-			if (token.kind == TokenKind.RBRACKET) {
-				acceptIt();
-			}		
 		case BOOLEAN:
 			acceptIt();
 		default:
