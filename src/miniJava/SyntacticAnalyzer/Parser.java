@@ -45,7 +45,7 @@ public class Parser {
 	}
 
 	// ClassDeclaration ::= class id { (FieldOrMethDec)* }
-	private void parseClassDeclaration() {
+	private void parseClassDeclaration() throws SyntaxError {
 		accept(TokenKind.CLASS);
 		accept(TokenKind.ID);
 		accept(TokenKind.LBRACE);
@@ -60,18 +60,19 @@ public class Parser {
 	}
 	
 	// FieldOrMethDec ::= ( public | private )? Access
-	private void parseFieldOrMethDec() {
+	private void parseFieldOrMethDec() throws SyntaxError {
 		switch (token.kind) {
 		case PUBLIC: case PRIVATE:
 			acceptIt();
 			parseAccess();
+			break;
 		default:
 			parseAccess();
 		}
 	}
 	
 	// Access ::= static? ( ( int ( [] )? | id ( [] )? | Boolean ) TypeReturn | void VoidReturn)
-	private void parseAccess() {
+	private void parseAccess() throws SyntaxError {
 		if (token.kind == TokenKind.STATIC) {
 			acceptIt();	
 		}
@@ -83,19 +84,22 @@ public class Parser {
 				accept(TokenKind.RBRACKET);
 			}
 			parseTypeReturn();
+			break;
 		case BOOLEAN:
 			acceptIt();
 			parseTypeReturn();
+			break;
 		case VOID:
 			acceptIt();
 			parseVoidReturn();
+			break;
 		default:
 			parseError("Invalid Term - expecting TYPE or VOID but found " + token.kind);
 		}
 	}
 	
 	// TypeReturn ::= id ( ; | ( ParameterList? ) {Statement*} )
-	private void parseTypeReturn() {
+	private void parseTypeReturn() throws SyntaxError {
 		accept(TokenKind.ID); 
 		switch (token.kind) {
 		case SEMICOL:
@@ -113,13 +117,14 @@ public class Parser {
 			/* TODO 
 			 *  parse statement* and following (confirm RBRACE can follow statement)
 			 */
+			break;
 		default:
 			parseError("Invalid Term - expecting SEMICOL or LPAREN but found " + token.kind);
 		}
 	}
 
 	// VoidReturn ::= id ( ParameterList? ) {Statement*}
-	private void parseVoidReturn() {
+	private void parseVoidReturn() throws SyntaxError {
 		accept(TokenKind.ID); 
 		accept(TokenKind.LPAREN);
 		if (token.kind != TokenKind.RPAREN) {
@@ -135,7 +140,7 @@ public class Parser {
 	}
 	
 	// ParameterList ::= ( int ( [] )? | id ( [] )? | Boolean ) id ( , ( int ( [] )? | id ( [] )? | Boolean ) id)*
-	private void parseParameterList() {
+	private void parseParameterList() throws SyntaxError {
 		switch (token.kind) {
 		case INT: case ID:
 			acceptIt();
@@ -143,8 +148,10 @@ public class Parser {
 				acceptIt();
 				accept(TokenKind.RBRACKET);
 			}
+			break;
 		case BOOLEAN:
 			acceptIt();
+			break;
 		default:
 			parseError("Invalid Term - expecting TYPE but found " + token.kind);
 		}	
@@ -156,12 +163,12 @@ public class Parser {
 				acceptIt();
 				if (token.kind == TokenKind.LBRACKET) {
 					acceptIt();
+					accept(TokenKind.RBRACKET);
 				}
-				if (token.kind == TokenKind.RBRACKET) {
-					acceptIt();
-				}		
+				break;	
 			case BOOLEAN:
 				acceptIt();
+				break;
 			default:
 				parseError("Invalid Term - expecting TYPE but found " + token.kind);
 			}	
@@ -169,16 +176,158 @@ public class Parser {
 	}
 	
 	// Reference ::= ( id | this ) ( . id )*
-	private void parseReference() {
+	private void parseReference() throws SyntaxError {
 		switch(token.kind) {
 		case ID: case THIS:
 			acceptIt();
+			break;
 		default: 
 			parseError("Invalid Term - expecting ID or THIS but found " + token.kind);
 		}
 		while (token.kind == TokenKind.DOT) {
 			acceptIt();
 			accept(TokenKind.ID);
+		}
+	}
+	
+	private void parseStatement() throws SyntaxError {
+		switch(token.kind) {
+		case LBRACE:
+			acceptIt();
+			while (token.kind != TokenKind.RBRACE) {
+				parseStatement();
+			}
+			accept(TokenKind.RBRACE);
+			break;
+		case INT:
+			acceptIt();
+			if (token.kind == TokenKind.LBRACKET) {
+				acceptIt();
+				accept(TokenKind.RBRACKET);
+			}
+			accept(TokenKind.ID);
+			accept(TokenKind.ASSIGN);
+			parseExpression();
+			accept(TokenKind.SEMICOL);
+			break;
+		case BOOLEAN:
+			acceptIt();
+			accept(TokenKind.ID);
+			accept(TokenKind.ASSIGN);
+			parseExpression();
+			accept(TokenKind.SEMICOL);
+			break;
+		case RETURN:
+			acceptIt();
+			if (token.kind == TokenKind.SEMICOL) {
+				acceptIt();
+			} else {
+				parseExpression();
+				accept(TokenKind.SEMICOL);
+			}
+			break;
+		case IF:
+			acceptIt();
+			accept(TokenKind.LPAREN);
+			parseExpression();
+			accept(TokenKind.RPAREN);
+			parseStatement();
+			if (token.kind == TokenKind.ELSE) {
+				acceptIt();
+				parseStatement();
+			}
+			break;
+		case WHILE:
+		}
+	}
+	
+	private void parseExpression() throws SyntaxError {
+		switch(token.kind) {
+		case ID: case THIS:
+			parseReference();
+			if (token.kind == TokenKind.LBRACKET) {
+				acceptIt();
+				parseExpression();
+				accept(TokenKind.RBRACKET);
+				parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
+			} else if (token.kind == TokenKind.LPAREN) {
+				acceptIt(); 
+				parseArgumentList();
+				accept(TokenKind.RPAREN);
+				parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
+			} else {
+				parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
+			}
+			break;
+		case NOT: case MINUS:
+			parseExpression();
+			parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
+			break;
+		case LPAREN:
+			parseExpression();
+			accept(TokenKind.RPAREN);
+			parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
+			break;
+		case NUM: case TRUE: case FALSE:
+			acceptIt();
+			parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
+			break;
+		case NEW:
+			acceptIt();
+			if (token.kind == TokenKind.ID) {
+				acceptIt();
+				if (token.kind == TokenKind.LPAREN) {
+					acceptIt();
+					accept(TokenKind.RPAREN);
+				} else if (token.kind == TokenKind.LBRACKET) {
+					acceptIt();
+					parseExpression();
+					accept(TokenKind.RBRACKET);
+				} else {
+					parseError("Invalid Term - expecting LPAREN or LBRACKET but found " + token.kind);
+				}
+			} else if (token.kind == TokenKind.INT) {
+				acceptIt();
+				accept(TokenKind.LBRACKET);
+				parseExpression();
+				accept(TokenKind.RBRACKET);
+			} else {
+				parseError("Invalid Term - expecting ID or INT but found " + token.kind);
+			}
+			parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
+			break;
+		default:
+			parseError("Invalid Term - expecting ID/THIS/NOT/MINUS/LPAREN/NUM/TRUE/FALSE/NEW "
+					+ "but found " + token.kind);
+		}
+	}
+	
+	private void parseBinaryExpression() throws SyntaxError {
+		if (token.kind == TokenKind.GREATER              // BinaryExpression?
+				|| token.kind == TokenKind.LESS
+				|| token.kind == TokenKind.EQUAL
+				|| token.kind == TokenKind.LESSEQUAL
+				|| token.kind == TokenKind.GREATEREQUAL
+				|| token.kind == TokenKind.NOTEQUAL
+				|| token.kind == TokenKind.MINUS
+				|| token.kind == TokenKind.PLUS
+				|| token.kind == TokenKind.TIMES
+				|| token.kind == TokenKind.DIVIDE
+				|| token.kind == TokenKind.AND
+				|| token.kind == TokenKind.OR) {
+			acceptIt();
+			parseExpression();
+		} else {       // no binary expression following
+			return; 
+		}
+	}
+	
+	// ArgumentList ::= Expression ( , Expression )*
+	private void parseArgumentList() throws SyntaxError {
+		parseExpression();
+		while (token.kind == TokenKind.COMMA) {
+			acceptIt();
+			parseExpression();
 		}
 	}
 	
