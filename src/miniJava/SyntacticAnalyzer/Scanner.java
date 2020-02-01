@@ -25,6 +25,7 @@ public class Scanner {
 		readChar();
 	}
 	
+	 
 	/**
 	 * skip whitespace and scan next token
 	 */
@@ -64,6 +65,9 @@ public class Scanner {
 				while (!eot && currentChar != eolUnix && currentChar != eolWindows) {
 					skipIt();
 				}
+			}
+			while (!eot && isWhiteSpace(currentChar)) { // skip whitespace 
+				skipIt();
 			}
 			currentSpelling = new StringBuilder();  // original token scanned was a comment, scan next token and check for comment again
 			kind = scanToken();                     // loop continues until valid token found

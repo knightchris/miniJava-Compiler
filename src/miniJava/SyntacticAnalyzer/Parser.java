@@ -170,6 +170,7 @@ public class Parser {
 			default:
 				parseError("Invalid Term - expecting TYPE but found " + token.kind);
 			}	
+			accept(TokenKind.ID);
 		}	
 	}
 	
@@ -188,6 +189,16 @@ public class Parser {
 		}
 	}
 	
+	/*
+	Statement ::= { Statement* }  
+                        | ( int ( [] )? | id ( [] )? | Boolean ) id = Expression ;  
+                        | Reference = Expression ;  
+                        | Reference [ Expression ] = Expression ;  
+                        | Reference ( ArgumentList? ) ;  
+                        | return Expression? ;  
+                        | if ( Expression ) Statement (else Statement)?  
+                        | while ( Expression ) Statement  
+	 */
 	private void parseStatement() throws SyntaxError {
 		switch(token.kind) {
 		case LBRACE:
@@ -350,6 +361,16 @@ public class Parser {
 		}
 	}
 	
+	
+	/*
+	 Expression ::= Reference BinaryExpression?  
+                        | Reference [ Expression ] BinaryExpression?  
+                        | Reference ( ArgumentList? ) BinaryExpression?  
+                        | unop Expression BinaryExpression?  
+                        | ( Expression ) BinaryExpression?  
+                        | num | true | false BinaryExpression?  
+                        | new ( id() | int [ Expression ] | id [ Expression ] ) BinaryExpression?  
+	 */
 	private void parseExpression() throws SyntaxError {
 		switch(token.kind) {
 		case ID: case THIS:
@@ -373,10 +394,12 @@ public class Parser {
 			}
 			break;
 		case NOT: case MINUS:
+			acceptIt();
 			parseExpression();
 			parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
 			break;
 		case LPAREN:
+			acceptIt();
 			parseExpression();
 			accept(TokenKind.RPAREN);
 			parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
@@ -415,6 +438,7 @@ public class Parser {
 		}
 	}
 	
+	// BinaryExpression ::= binop Expression  
 	private void parseBinaryExpression() throws SyntaxError {
 		if (token.kind == TokenKind.GREATER              // BinaryExpression?
 				|| token.kind == TokenKind.LESS
