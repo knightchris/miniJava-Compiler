@@ -3,6 +3,8 @@ package miniJava.SyntacticAnalyzer;
 import miniJava.SyntacticAnalyzer.TokenKind;
 import miniJava.SyntacticAnalyzer.Scanner;
 import miniJava.ErrorReporter;
+import miniJava.AbstractSyntaxTrees.*;
+import miniJava.AbstractSyntaxTrees.Package;
 
 public class Parser {
 	
@@ -27,166 +29,188 @@ public class Parser {
 	/**
 	 *  parse input, catch possible parse error
 	 */
-	public void parse() {
+	public Package parse() {
 		token = scanner.scan();
 		try {
-			parseProgram();
+			return parseProgram();
 		}
-		catch (SyntaxError e) { }
+		catch (SyntaxError e) {return null;}
 	}
 
 	// Program ::= (ClassDeclaration)* eot
-	private void parseProgram() throws SyntaxError {
+	private Package parseProgram() throws SyntaxError {
+		ClassDeclList classList = new ClassDeclList();
 		while (token.kind != TokenKind.EOT) {
-			parseClassDeclaration();
+			classList.add(parseClassDeclaration());
 		}
 		accept(TokenKind.EOT);
+		return new Package(classList, null);
 	}
 
-	// ClassDeclaration ::= class id { (FieldOrMethDec)* }
-	private void parseClassDeclaration() throws SyntaxError {
+	/*
+	ClassDeclaration ::= class id { ( ( public | private )? static? 
+			(Type id ( ; | ( ParameterList? ) {Statement*} )
+			   |  void id ( ParameterList? ) {Statement*}  ) )* 
+	*/
+	private ClassDecl parseClassDeclaration() throws SyntaxError {
 		accept(TokenKind.CLASS);
+		String className = token.spelling;
+		MethodDeclList methodList = new MethodDeclList();
+		FieldDeclList fieldList = new FieldDeclList();
 		accept(TokenKind.ID);
 		accept(TokenKind.LBRACE);
 		while (token.kind != TokenKind.RBRACE) {
-			parseFieldOrMethDec();
+			boolean isPrivate = false;
+			boolean isStatic = false;
+			StatementList stmtList = new StatementList();
+			ParameterDeclList paraList = new ParameterDeclList();
+			if (token.kind == TokenKind.PRIVATE) {
+				acceptIt();
+				isPrivate = true;
+			} else if (token.kind == TokenKind.PUBLIC) {
+				acceptIt();
+			}
+			if (token.kind == TokenKind.STATIC) {
+				acceptIt();	
+				isStatic = true;
+			}
+			switch (token.kind) {
+			case INT: case ID: case BOOLEAN: // type field/method
+				TypeDenoter type = parseType();
+				String fieldName = token.spelling;
+				accept(TokenKind.ID); 
+				switch (token.kind) {
+				case SEMICOL: // fielddecl
+					fieldList.add(new FieldDecl(isPrivate, isStatic, type, fieldName, null));
+					acceptIt();
+					break;
+				case LPAREN: // methoddecl
+					acceptIt();
+					if (token.kind != TokenKind.RPAREN) {
+						paraList = parseParameterList();
+						accept(TokenKind.RPAREN);
+					} else {
+						// no parameters
+						accept(TokenKind.RPAREN);
+					}
+					accept(TokenKind.LBRACE);
+					while (token.kind != TokenKind.RBRACE) {
+						stmtList.add(parseStatement());
+					}
+					accept(TokenKind.RBRACE);
+					MemberDecl methodField = new FieldDecl(isPrivate, isStatic, type, fieldName, null);
+					methodList.add(new MethodDecl(methodField, paraList, stmtList, null));
+					break;
+				default:
+					parseError("Invalid Term - expecting SEMICOL or LPAREN but found " + token.kind);
+				}
+				break;
+			case VOID: // void method
+				acceptIt();
+				TypeDenoter voidType = new BaseType(TypeKind.VOID, null);
+				String methName = token.spelling;
+				accept(TokenKind.ID); 
+				accept(TokenKind.LPAREN);
+				if (token.kind != TokenKind.RPAREN) {
+					paraList = parseParameterList();
+					accept(TokenKind.RPAREN);
+				} else {
+					// no parameters
+					accept(TokenKind.RPAREN);
+				}
+				accept(TokenKind.LBRACE);
+				while (token.kind != TokenKind.RBRACE) {
+					stmtList.add(parseStatement());
+				}
+				accept(TokenKind.RBRACE);
+				MemberDecl methodField = new FieldDecl(isPrivate, isStatic, voidType, methName, null);
+				methodList.add(new MethodDecl(methodField, paraList, stmtList, null));
+				break;
+			default:
+				parseError("Invalid Term - expecting TYPE or VOID but found " + token.kind);
+			}
 		}
 		accept(TokenKind.RBRACE);
+		return new ClassDecl(className, fieldList, methodList, null);
 		}
 	
-	
-	// FieldOrMethDec ::= ( public | private )? Access
-	private void parseFieldOrMethDec() throws SyntaxError {
-		switch (token.kind) {
-		case PUBLIC: case PRIVATE:
+	// Type ::= ( int ( [] )? | id ( [] )? | Boolean )
+	private TypeDenoter parseType() throws SyntaxError {
+		TypeDenoter type = null;
+		switch(token.kind) {
+		case INT:  
 			acceptIt();
-			parseAccess();
+			type = new BaseType(TypeKind.INT, null);
+			if (token.kind == TokenKind.LBRACKET) {
+				acceptIt();
+				accept(TokenKind.RBRACKET);
+				type = new ArrayType(type, null);
+			}
 			break;
-		default:
-			parseAccess();
-		}
-	}
-	
-	// Access ::= static? ( ( int ( [] )? | id ( [] )? | Boolean ) TypeReturn | void VoidReturn)
-	private void parseAccess() throws SyntaxError {
-		if (token.kind == TokenKind.STATIC) {
-			acceptIt();	
-		}
-		switch (token.kind) {
-		case INT: case ID:
+		case ID:
+			type = new ClassType(new Identifier(token), null);
 			acceptIt();
 			if (token.kind == TokenKind.LBRACKET) {
 				acceptIt();
 				accept(TokenKind.RBRACKET);
-			}
-			parseTypeReturn();
-			break;
-		case BOOLEAN:
-			acceptIt();
-			parseTypeReturn();
-			break;
-		case VOID:
-			acceptIt();
-			parseVoidReturn();
-			break;
-		default:
-			parseError("Invalid Term - expecting TYPE or VOID but found " + token.kind);
-		}
-	}
-	
-	// TypeReturn ::= id ( ; | ( ParameterList? ) {Statement*} )
-	private void parseTypeReturn() throws SyntaxError {
-		accept(TokenKind.ID); 
-		switch (token.kind) {
-		case SEMICOL:
-			acceptIt();
-			return;
-		case LPAREN:
-			acceptIt();
-			if (token.kind != TokenKind.RPAREN) {
-				parseParameterList();
-				accept(TokenKind.RPAREN);
-			} else {
-				accept(TokenKind.RPAREN);
-			}
-			accept(TokenKind.LBRACE);
-			while (token.kind != TokenKind.RBRACE) {
-				parseStatement();
-			}
-			accept(TokenKind.RBRACE);
-			break;
-		default:
-			parseError("Invalid Term - expecting SEMICOL or LPAREN but found " + token.kind);
-		}
-	}
-
-	// VoidReturn ::= id ( ParameterList? ) {Statement*}
-	private void parseVoidReturn() throws SyntaxError {
-		accept(TokenKind.ID); 
-		accept(TokenKind.LPAREN);
-		if (token.kind != TokenKind.RPAREN) {
-			parseParameterList();
-			accept(TokenKind.RPAREN);
-		} else {
-			accept(TokenKind.RPAREN);
-		}
-		accept(TokenKind.LBRACE);
-		while (token.kind != TokenKind.RBRACE) {
-			parseStatement();
-		}
-		accept(TokenKind.RBRACE);
-	}
-	
-	// ParameterList ::= ( int ( [] )? | id ( [] )? | Boolean ) id ( , ( int ( [] )? | id ( [] )? | Boolean ) id)*
-	private void parseParameterList() throws SyntaxError {
-		switch (token.kind) {
-		case INT: case ID:
-			acceptIt();
-			if (token.kind == TokenKind.LBRACKET) {
-				acceptIt();
-				accept(TokenKind.RBRACKET);
+				type = new ArrayType(type, null);
 			}
 			break;
 		case BOOLEAN:
 			acceptIt();
+			type = new BaseType(TypeKind.BOOLEAN, null);
 			break;
 		default:
 			parseError("Invalid Term - expecting TYPE but found " + token.kind);
-		}	
+		}
+		return type;
+	}
+	
+	// ParameterList ::= Type id ( , Type id)*  
+	private ParameterDeclList parseParameterList() throws SyntaxError {
+		ParameterDeclList paraList = new ParameterDeclList();
+		TypeDenoter type = parseType();
+		String paraName = token.spelling;
+		paraList.add(new ParameterDecl(type, paraName, null));
 		accept(TokenKind.ID);
 		while (token.kind == TokenKind.COMMA) {
 			acceptIt();
-			switch (token.kind) {
-			case INT: case ID:
-				acceptIt();
-				if (token.kind == TokenKind.LBRACKET) {
-					acceptIt();
-					accept(TokenKind.RBRACKET);
-				}
-				break;	
-			case BOOLEAN:
-				acceptIt();
-				break;
-			default:
-				parseError("Invalid Term - expecting TYPE but found " + token.kind);
-			}	
+			type = parseType();
+			paraName = token.spelling;
+			paraList.add(new ParameterDecl(type, paraName, null));
 			accept(TokenKind.ID);
-		}	
+		}
+		return paraList;
 	}
 	
 	// Reference ::= ( id | this ) ( . id )*
-	private void parseReference() throws SyntaxError {
+	private Reference parseReference() throws SyntaxError {
+		Reference ref = null;
 		switch(token.kind) {
-		case ID: case THIS:
+		case ID: 
+			ref = new IdRef(new Identifier(token), null);
 			acceptIt();
+			while (token.kind == TokenKind.DOT) {
+				acceptIt();
+				Identifier id = new Identifier(token);
+				ref = new QualRef(ref, id, null);
+				accept(TokenKind.ID);
+			}
+			break;
+		case THIS:
+			ref = new ThisRef(null);
+			acceptIt();
+			while (token.kind == TokenKind.DOT) {
+				acceptIt();
+				Identifier id = new Identifier(token);
+				ref = new QualRef(ref, id, null);
+				accept(TokenKind.ID);
+			}
 			break;
 		default: 
 			parseError("Invalid Term - expecting ID or THIS but found " + token.kind);
 		}
-		while (token.kind == TokenKind.DOT) {
-			acceptIt();
-			accept(TokenKind.ID);
-		}
+		return ref;
 	}
 	
 	/*
@@ -199,7 +223,7 @@ public class Parser {
                         | if ( Expression ) Statement (else Statement)?  
                         | while ( Expression ) Statement  
 	 */
-	private void parseStatement() throws SyntaxError {
+	private Statement parseStatement() throws SyntaxError {
 		switch(token.kind) {
 		case LBRACE:
 			acceptIt();
@@ -371,7 +395,7 @@ public class Parser {
                         | num | true | false BinaryExpression?  
                         | new ( id() | int [ Expression ] | id [ Expression ] ) BinaryExpression?  
 	 */
-	private void parseExpression() throws SyntaxError {
+	private Expression parseExpression() throws SyntaxError {
 		switch(token.kind) {
 		case ID: case THIS:
 			parseReference();
@@ -460,12 +484,14 @@ public class Parser {
 	}
 	
 	// ArgumentList ::= Expression ( , Expression )*
-	private void parseArgumentList() throws SyntaxError {
-		parseExpression();
+	private ExprList parseArgumentList() throws SyntaxError {
+		ExprList argList = new ExprList();
+		argList.add(parseExpression());
 		while (token.kind == TokenKind.COMMA) {
 			acceptIt();
-			parseExpression();
+			argList.add(parseExpression());
 		}
+		return argList;
 	}
 	
 	/**
