@@ -183,6 +183,17 @@ public class Parser {
 		return paraList;
 	}
 	
+	// ArgumentList ::= Expression ( , Expression )*
+		private ExprList parseArgumentList() throws SyntaxError {
+			ExprList argList = new ExprList();
+			argList.add(parseExpression());
+			while (token.kind == TokenKind.COMMA) {
+				acceptIt();
+				argList.add(parseExpression());
+			}
+			return argList;
+		}
+	
 	// Reference ::= ( id | this ) ( . id )*
 	private Reference parseReference() throws SyntaxError {
 		Reference ref = null;
@@ -385,114 +396,178 @@ public class Parser {
 		}
 	}
 	
-	
-	/*
-	 Expression ::= Reference BinaryExpression?  
-                        | Reference [ Expression ] BinaryExpression?  
-                        | Reference ( ArgumentList? ) BinaryExpression?  
-                        | unop Expression BinaryExpression?  
-                        | ( Expression ) BinaryExpression?  
-                        | num | true | false BinaryExpression?  
-                        | new ( id() | int [ Expression ] | id [ Expression ] ) BinaryExpression?  
-	 */
+	// Expression ::= Disjunction  
 	private Expression parseExpression() throws SyntaxError {
+		return parseDisjunction();
+	}
+	
+	// Disjunction ::= Conjunction ( || Conjunction)* 
+	private Expression parseDisjunction() throws SyntaxError {
+		Expression resultExpr = parseConjunction();
+		while (token.kind == TokenKind.OR) {
+			Operator op = new Operator(token);
+			acceptIt();
+			Expression additionalExpr = parseConjunction();
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+		}
+		return resultExpr;
+	}
+
+	// Conjunction ::= Equality ( && Equality)* 
+	private Expression parseConjunction() throws SyntaxError {
+		Expression resultExpr = parseEquality();
+		while (token.kind == TokenKind.AND) {
+			Operator op = new Operator(token);
+			acceptIt();
+			Expression additionalExpr = parseEquality();
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+		}
+		return resultExpr;
+	}
+
+	// Equality ::= Relational ( ( == | != ) Relational)* 
+	private Expression parseEquality() throws SyntaxError {
+		Expression resultExpr = parseRelational();
+		while (token.kind == TokenKind.EQUAL || token.kind == TokenKind.NOTEQUAL) {
+			Operator op = new Operator(token);
+			acceptIt();
+			Expression additionalExpr = parseRelational();
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+		}
+		return resultExpr;
+	}
+
+	// Relational ::= Additive ( ( <= | < | > |  >= ) Additive)* 
+	private Expression parseRelational() throws SyntaxError {
+		Expression resultExpr = parseAdditive();
+		while (token.kind == TokenKind.LESSEQUAL || token.kind == TokenKind.LESS
+			  || token.kind == TokenKind.GREATER || token.kind == TokenKind.GREATEREQUAL) {
+			Operator op = new Operator(token);
+			acceptIt();
+			Expression additionalExpr = parseAdditive();
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+		}
+		return resultExpr;
+	}
+
+	// Additive ::= Multiplicative ( ( + | - ) Multiplicative)* 
+	private Expression parseAdditive() throws SyntaxError {
+		Expression resultExpr = parseMultiplicative();
+		while (token.kind == TokenKind.PLUS || token.kind == TokenKind.MINUS) {
+			Operator op = new Operator(token);
+			acceptIt();
+			Expression additionalExpr = parseMultiplicative();
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+		}
+		return resultExpr;
+	}
+
+	// Multiplicative ::= Unary ( ( * | / ) Unary)* 
+	private Expression parseMultiplicative() throws SyntaxError {
+		Expression resultExpr = parseUnary();
+		while (token.kind == TokenKind.TIMES || token.kind == TokenKind.DIVIDE) {
+			Operator op = new Operator(token);
+			acceptIt();
+			Expression additionalExpr = parseUnary();
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+		}
+		return resultExpr;
+	}
+	
+	// Unary ::= EndExpression ( ( - | ! ) EndExpression )* 
+	private Expression parseUnary() {
+		Expression resultExpr = parseEndExpression();
+		while (token.kind == TokenKind.MINUS || token.kind == TokenKind.NOT) {
+			Operator op = new Operator(token);
+			acceptIt();
+			Expression additionalExpr = parseEndExpression();
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+		}
+		return resultExpr;
+	}
+
+	/*
+		EndExpression ::= Reference  
+                        | Reference [ Expression ]  
+                        | Reference ( ArgumentList? )  
+                        | ( Expression )  
+                        | num | true | false  
+                        | new ( id() | int [ Expression ] | id [ Expression ] ) 
+
+	 */
+	private Expression parseEndExpression() throws SyntaxError {
+		Terminal terminal;
+		Expression resultExpr;
+		Identifier id;
 		switch(token.kind) {
 		case ID: case THIS:
-			parseReference();
-			if (token.kind == TokenKind.LBRACKET) {
+			Reference ref = parseReference();
+			if (token.kind == TokenKind.LBRACKET) { // IxExpr
 				acceptIt();
-				parseExpression();
+				resultExpr = parseExpression();
 				accept(TokenKind.RBRACKET);
-				parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
-			} else if (token.kind == TokenKind.LPAREN) {
+				return new IxExpr(ref, resultExpr, null);
+			} else if (token.kind == TokenKind.LPAREN) { // CallExpr
 				acceptIt(); 
+				ExprList argList = new ExprList();
 				if (token.kind == TokenKind.RPAREN) {
 					acceptIt();
 				} else {
-					parseArgumentList();
+					argList = parseArgumentList();
 					accept(TokenKind.RPAREN);
 				}
-				parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
+				return new CallExpr(ref, argList, null);
 			} else {
-				parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
+				return new RefExpr(ref, null); // RefExpr
 			}
-			break;
-		case NOT: case MINUS:
-			acceptIt();
-			parseExpression();
-			parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
-			break;
 		case LPAREN:
 			acceptIt();
-			parseExpression();
+			resultExpr = parseExpression();
 			accept(TokenKind.RPAREN);
-			parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
-			break;
-		case NUM: case TRUE: case FALSE:
+			return resultExpr;
+		case TRUE: case FALSE:
+			terminal = new BooleanLiteral(token);
 			acceptIt();
-			parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
-			break;
+			return new LiteralExpr(terminal, null);
+		case NUM:
+			terminal = new IntLiteral(token);
+			acceptIt();
+			return new LiteralExpr(terminal, null);
 		case NEW:
 			acceptIt();
 			if (token.kind == TokenKind.ID) {
+				id = new Identifier(token);
 				acceptIt();
-				if (token.kind == TokenKind.LPAREN) {
+				if (token.kind == TokenKind.LPAREN) { // NewObjectExpr
 					acceptIt();
 					accept(TokenKind.RPAREN);
-				} else if (token.kind == TokenKind.LBRACKET) {
+					return new NewObjectExpr(new ClassType(id, null), null);
+				} else if (token.kind == TokenKind.LBRACKET) { // NewArrayExpr
 					acceptIt();
-					parseExpression();
+					resultExpr = parseExpression();
 					accept(TokenKind.RBRACKET);
+					return new NewArrayExpr(new ClassType(id, null), resultExpr, null);
 				} else {
 					parseError("Invalid Term - expecting LPAREN or LBRACKET but found " + token.kind);
+					return null;
 				}
-			} else if (token.kind == TokenKind.INT) {
+			} else if (token.kind == TokenKind.INT) { // NewArrayExpr
 				acceptIt();
 				accept(TokenKind.LBRACKET);
-				parseExpression();
+				resultExpr = parseExpression();
 				accept(TokenKind.RBRACKET);
+				return new NewArrayExpr(new BaseType(TypeKind.INT, null), resultExpr, null);
 			} else {
 				parseError("Invalid Term - expecting ID or INT but found " + token.kind);
+				return null;
 			}
-			parseBinaryExpression(); // BinaryExpression? Parse if exists. Checks if exists within method
-			break;
 		default:
 			parseError("Invalid Term - expecting ID/THIS/NOT/MINUS/LPAREN/NUM/TRUE/FALSE/NEW "
 					+ "but found " + token.kind);
+			return null;
 		}
 	}
 	
-	// BinaryExpression ::= binop Expression  
-	private void parseBinaryExpression() throws SyntaxError {
-		if (token.kind == TokenKind.GREATER              // BinaryExpression?
-				|| token.kind == TokenKind.LESS
-				|| token.kind == TokenKind.EQUAL
-				|| token.kind == TokenKind.LESSEQUAL
-				|| token.kind == TokenKind.GREATEREQUAL
-				|| token.kind == TokenKind.NOTEQUAL
-				|| token.kind == TokenKind.MINUS
-				|| token.kind == TokenKind.PLUS
-				|| token.kind == TokenKind.TIMES
-				|| token.kind == TokenKind.DIVIDE
-				|| token.kind == TokenKind.AND
-				|| token.kind == TokenKind.OR) {
-			acceptIt();
-			parseExpression();
-		} else {       // no binary expression following
-			return; 
-		}
-	}
-	
-	// ArgumentList ::= Expression ( , Expression )*
-	private ExprList parseArgumentList() throws SyntaxError {
-		ExprList argList = new ExprList();
-		argList.add(parseExpression());
-		while (token.kind == TokenKind.COMMA) {
-			acceptIt();
-			argList.add(parseExpression());
-		}
-		return argList;
-	}
 	
 	/**
 	 * accept current token and advance to next token
