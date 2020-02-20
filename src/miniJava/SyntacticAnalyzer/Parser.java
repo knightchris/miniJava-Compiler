@@ -235,164 +235,206 @@ public class Parser {
                         | while ( Expression ) Statement  
 	 */
 	private Statement parseStatement() throws SyntaxError {
+		StatementList stmtList;
+		TypeDenoter type;
+		Identifier id;
+		Identifier typeId;
+		Expression resultExpr;
+		String varName;
+		VarDecl variable;
+		Expression condition;
+		Statement thenStmt;
+		Statement elseStmt;
+		Statement whileBody;
+		Reference ref;
+		Expression idxExpr;
+		ExprList argList;
 		switch(token.kind) {
 		case LBRACE:
 			acceptIt();
+			stmtList = new StatementList();
 			while (token.kind != TokenKind.RBRACE) {
-				parseStatement();
+				stmtList.add(parseStatement());
 			}
 			accept(TokenKind.RBRACE);
-			break;
+			return new BlockStmt(stmtList, null);
 		case INT:
 			acceptIt();
+			type = new BaseType(TypeKind.INT, null); // int
 			if (token.kind == TokenKind.LBRACKET) {
 				acceptIt();
 				accept(TokenKind.RBRACKET);
+				type = new ArrayType(type, null); // int[]
 			}
+			varName = token.spelling;
 			accept(TokenKind.ID);
 			accept(TokenKind.ASSIGN);
-			parseExpression();
+			resultExpr = parseExpression();
 			accept(TokenKind.SEMICOL);
-			break;
+			variable = new VarDecl(type, varName, null);
+			return new VarDeclStmt(variable, resultExpr, null);
 		case BOOLEAN:
 			acceptIt();
+			type = new BaseType(TypeKind.BOOLEAN, null);
+			varName = token.spelling;
 			accept(TokenKind.ID);
 			accept(TokenKind.ASSIGN);
-			parseExpression();
+			resultExpr = parseExpression();
 			accept(TokenKind.SEMICOL);
-			break;
+			variable = new VarDecl(type, varName, null);
+			return new VarDeclStmt(variable, resultExpr, null);
 		case RETURN:
 			acceptIt();
 			if (token.kind == TokenKind.SEMICOL) {
 				acceptIt();
+				return new ReturnStmt(null, null);
 			} else {
-				parseExpression();
+				resultExpr = parseExpression();
 				accept(TokenKind.SEMICOL);
+				return new ReturnStmt(resultExpr, null);
 			}
-			break;
 		case IF:
 			acceptIt();
 			accept(TokenKind.LPAREN);
-			parseExpression();
+			condition = parseExpression();
 			accept(TokenKind.RPAREN);
-			parseStatement();
+			thenStmt = parseStatement();
 			if (token.kind == TokenKind.ELSE) {
 				acceptIt();
-				parseStatement();
+				elseStmt = parseStatement();
+				return new IfStmt(condition, thenStmt, elseStmt, null);
 			}
-			break;
+			return new IfStmt(condition, thenStmt, null);
 		case WHILE:
 			acceptIt();
 			accept(TokenKind.LPAREN);
-			parseExpression();
+			condition = parseExpression();
 			accept(TokenKind.RPAREN);
-			parseStatement();
-			break;
+			whileBody = parseStatement();
+			return new WhileStmt(condition, whileBody, null);
 		case THIS:
-			parseReference();
+			ref = parseReference();
 			switch(token.kind) {
 			case ASSIGN:
 				acceptIt();
-				parseExpression();
+				resultExpr = parseExpression();
 				accept(TokenKind.SEMICOL);
-				break;
+				return new AssignStmt(ref, resultExpr, null);
 			case LBRACKET:
 				acceptIt();
-				parseExpression();
+				idxExpr = parseExpression();
 				accept(TokenKind.RBRACKET);
 				accept(TokenKind.ASSIGN);
-				parseExpression();
+				resultExpr = parseExpression();
 				accept(TokenKind.SEMICOL);
-				break;
+				return new IxAssignStmt(ref, idxExpr, resultExpr, null);
 			case LPAREN:
 				acceptIt();
+				argList = new ExprList();
 				if (token.kind == TokenKind.RPAREN) {
 					acceptIt();
 				} else {
-					parseArgumentList();
+					argList = parseArgumentList();
 					accept(TokenKind.RPAREN);
 				}
 				accept(TokenKind.SEMICOL);
-				break;
+				return new CallStmt(ref, argList, null);
 			default:
 				parseError("Invalid Term - expecting ASSIGN/LBRACKET/LPAREN but found " + token.kind);
+				return null;
 			}
-			break;
 		case ID:
+			typeId = new Identifier(token);
+			ref = new IdRef(typeId, null);
 			acceptIt();
 			switch(token.kind) {
-			case ID:
+			case ID: // id id = Expression;
+				varName = token.spelling;
 				acceptIt();
 				accept(TokenKind.ASSIGN);
-				parseExpression();
+				resultExpr = parseExpression();
 				accept(TokenKind.SEMICOL);
-				break;
-			case ASSIGN:
+				variable = new VarDecl(new ClassType(typeId, null), varName, null);
+				return new VarDeclStmt(variable, resultExpr, null);
+			case ASSIGN: // id = Expression;
 				acceptIt();
-				parseExpression();
+				resultExpr = parseExpression();
 				accept(TokenKind.SEMICOL);
-				break;
-			case LPAREN:
+				return new AssignStmt(ref, resultExpr, null);
+			case LPAREN: // id (Arglist?);
 				acceptIt();
+				argList = new ExprList();
 				if (token.kind == TokenKind.RPAREN) {
 					acceptIt();
 				} else {
-					parseArgumentList();
+					argList = parseArgumentList();
 					accept(TokenKind.RPAREN);
 				}
 				accept(TokenKind.SEMICOL);
-				break;
-			case LBRACKET:
+				return new CallStmt(ref, argList, null);
+			case LBRACKET: // id[] id = expression OR id[expression] = expression
 				acceptIt();
-				if (token.kind == TokenKind.RBRACKET) {
+				if (token.kind == TokenKind.RBRACKET) { // VarDeclStmt  id[] id = expression
 					acceptIt();
+					varName = token.spelling;
 					accept(TokenKind.ID);
 					accept(TokenKind.ASSIGN);
-					parseExpression();
+					resultExpr = parseExpression();
 					accept(TokenKind.SEMICOL);
-				} else {
-					parseExpression();
+					type = new ClassType(typeId, null);
+					type = new ArrayType(type, null);                       // had these 4 lines combined, very hard to read -> separate out despite causing more lines
+					variable = new VarDecl(type, varName, null);
+					return new VarDeclStmt(variable, resultExpr, null);
+				} else {								// IxAssignStmt   id[expression] = expression
+					idxExpr = parseExpression();
 					accept(TokenKind.RBRACKET);
 					accept(TokenKind.ASSIGN);
-					parseExpression();
+					resultExpr = parseExpression();
 					accept(TokenKind.SEMICOL);
+					return new IxAssignStmt(ref, idxExpr, resultExpr, null);
 				}
-				break;
 			case DOT:
 				while (token.kind == TokenKind.DOT) {
 					acceptIt();
+					id = new Identifier(token);
 					accept(TokenKind.ID);
+					ref = new QualRef(ref, id, null);
 				}
-				if (token.kind == TokenKind.ASSIGN) {
+				if (token.kind == TokenKind.ASSIGN) { // id (.id)* = Expression;     AssignStmt
 					acceptIt();
-					parseExpression();
+					resultExpr = parseExpression();
 					accept(TokenKind.SEMICOL);
-				} else if (token.kind == TokenKind.LBRACKET) {
+					return new AssignStmt(ref, resultExpr, null);
+				} else if (token.kind == TokenKind.LBRACKET) { // id (.id)*[Expression] = Expression;  IxAssignStmt
 					acceptIt();
-					parseExpression();
+					idxExpr = parseExpression();
 					accept(TokenKind.RBRACKET);
 					accept(TokenKind.ASSIGN);
-					parseExpression();
+					resultExpr = parseExpression();
 					accept(TokenKind.SEMICOL);
-				} else if (token.kind == TokenKind.LPAREN) {
+					return new IxAssignStmt(ref, idxExpr, resultExpr, null);
+				} else if (token.kind == TokenKind.LPAREN) {   // id (.id)* (ArgList?);    CallStmt
 					acceptIt();
+					argList = new ExprList();
 					if (token.kind == TokenKind.RPAREN) {
 						acceptIt();
 					} else {
-						parseArgumentList();
+						argList = parseArgumentList();
 						accept(TokenKind.RPAREN);
 					}
 					accept(TokenKind.SEMICOL);
+					return new CallStmt(ref, argList, null);
 				} else {
 					parseError("Invalid Term - expecting ASSIGN/LBRACKET/LPAREN but found " + token.kind);
+					return null;
 				}
-				break;
 			default:
 				parseError("Invalid Term - expecting ID/ASSIGN/LBRACKET/LPAREN/DOT but found " + token.kind);
+				return null;
 			}
-			break;
 		default:
 			parseError("Invalid Term - expecting ID/THIS/LBRACE/INT/RETURN/IF/WHILE/BOOLEAN but found " + token.kind);
+			return null;
 		}
 	}
 	
@@ -474,16 +516,17 @@ public class Parser {
 		return resultExpr;
 	}
 	
-	// Unary ::= EndExpression ( ( - | ! ) EndExpression )* 
+	// Unary ::= ( - | ! )* EndExpression 
 	private Expression parseUnary() {
-		Expression resultExpr = parseEndExpression();
-		while (token.kind == TokenKind.MINUS || token.kind == TokenKind.NOT) {
+		Expression resultExpr;
+		if (token.kind == TokenKind.MINUS || token.kind == TokenKind.NOT) {
 			Operator op = new Operator(token);
 			acceptIt();
-			Expression additionalExpr = parseEndExpression();
-			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+			resultExpr = new UnaryExpr(op, parseUnary(), null);
+			return resultExpr;
+		} else {
+			return parseEndExpression();
 		}
-		return resultExpr;
 	}
 
 	/*
