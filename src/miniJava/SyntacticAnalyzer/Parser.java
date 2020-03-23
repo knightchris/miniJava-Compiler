@@ -40,11 +40,12 @@ public class Parser {
 	// Program ::= (ClassDeclaration)* eot
 	private Package parseProgram() throws SyntaxError {
 		ClassDeclList classList = new ClassDeclList();
+		SourcePosition posn = scanner.getPos();
 		while (token.kind != TokenKind.EOT) {
 			classList.add(parseClassDeclaration());
 		}
 		accept(TokenKind.EOT);
-		return new Package(classList, null);
+		return new Package(classList, posn);
 	}
 
 	/*
@@ -57,6 +58,7 @@ public class Parser {
 		String className = token.spelling;
 		MethodDeclList methodList = new MethodDeclList();
 		FieldDeclList fieldList = new FieldDeclList();
+		SourcePosition posn = scanner.getPos();
 		accept(TokenKind.ID);
 		accept(TokenKind.LBRACE);
 		while (token.kind != TokenKind.RBRACE) {
@@ -64,6 +66,7 @@ public class Parser {
 			boolean isStatic = false;
 			StatementList stmtList = new StatementList();
 			ParameterDeclList paraList = new ParameterDeclList();
+			SourcePosition fieldOrMethPosn = scanner.getPos();
 			if (token.kind == TokenKind.PRIVATE) {
 				acceptIt();
 				isPrivate = true;
@@ -81,7 +84,7 @@ public class Parser {
 				accept(TokenKind.ID); 
 				switch (token.kind) {
 				case SEMICOL: // fielddecl
-					fieldList.add(new FieldDecl(isPrivate, isStatic, type, fieldName, null));
+					fieldList.add(new FieldDecl(isPrivate, isStatic, type, fieldName, fieldOrMethPosn));
 					acceptIt();
 					break;
 				case LPAREN: // methoddecl
@@ -98,8 +101,8 @@ public class Parser {
 						stmtList.add(parseStatement());
 					}
 					accept(TokenKind.RBRACE);
-					MemberDecl methodField = new FieldDecl(isPrivate, isStatic, type, fieldName, null);
-					methodList.add(new MethodDecl(methodField, paraList, stmtList, null));
+					MemberDecl methodField = new FieldDecl(isPrivate, isStatic, type, fieldName, fieldOrMethPosn);
+					methodList.add(new MethodDecl(methodField, paraList, stmtList, fieldOrMethPosn));
 					break;
 				default:
 					parseError("Invalid Term - expecting SEMICOL or LPAREN but found " + token.kind);
@@ -107,7 +110,7 @@ public class Parser {
 				break;
 			case VOID: // void method
 				acceptIt();
-				TypeDenoter voidType = new BaseType(TypeKind.VOID, null);
+				TypeDenoter voidType = new BaseType(TypeKind.VOID, scanner.getPos());
 				String methName = token.spelling;
 				accept(TokenKind.ID); 
 				accept(TokenKind.LPAREN);
@@ -123,15 +126,15 @@ public class Parser {
 					stmtList.add(parseStatement());
 				}
 				accept(TokenKind.RBRACE);
-				MemberDecl methodField = new FieldDecl(isPrivate, isStatic, voidType, methName, null);
-				methodList.add(new MethodDecl(methodField, paraList, stmtList, null));
+				MemberDecl methodField = new FieldDecl(isPrivate, isStatic, voidType, methName, fieldOrMethPosn);
+				methodList.add(new MethodDecl(methodField, paraList, stmtList, fieldOrMethPosn));
 				break;
 			default:
 				parseError("Invalid Term - expecting TYPE or VOID but found " + token.kind);
 			}
 		}
 		accept(TokenKind.RBRACE);
-		return new ClassDecl(className, fieldList, methodList, null);
+		return new ClassDecl(className, fieldList, methodList, posn);
 		}
 	
 	// Type ::= ( int ( [] )? | id ( [] )? | Boolean )
@@ -140,25 +143,25 @@ public class Parser {
 		switch(token.kind) {
 		case INT:  
 			acceptIt();
-			type = new BaseType(TypeKind.INT, null);
+			type = new BaseType(TypeKind.INT, scanner.getPos());
 			if (token.kind == TokenKind.LBRACKET) {
 				acceptIt();
 				accept(TokenKind.RBRACKET);
-				type = new ArrayType(type, null);
+				type = new ArrayType(type, scanner.getPos());
 			}
 			break;
 		case ID:
-			type = new ClassType(new Identifier(token), null);
+			type = new ClassType(new Identifier(token, scanner.getPos()), scanner.getPos());
 			acceptIt();
 			if (token.kind == TokenKind.LBRACKET) {
 				acceptIt();
 				accept(TokenKind.RBRACKET);
-				type = new ArrayType(type, null);
+				type = new ArrayType(type, scanner.getPos());
 			}
 			break;
 		case BOOLEAN:
 			acceptIt();
-			type = new BaseType(TypeKind.BOOLEAN, null);
+			type = new BaseType(TypeKind.BOOLEAN, scanner.getPos());
 			break;
 		default:
 			parseError("Invalid Term - expecting TYPE but found " + token.kind);
@@ -171,13 +174,13 @@ public class Parser {
 		ParameterDeclList paraList = new ParameterDeclList();
 		TypeDenoter type = parseType();
 		String paraName = token.spelling;
-		paraList.add(new ParameterDecl(type, paraName, null));
+		paraList.add(new ParameterDecl(type, paraName, scanner.getPos()));
 		accept(TokenKind.ID);
 		while (token.kind == TokenKind.COMMA) {
 			acceptIt();
 			type = parseType();
 			paraName = token.spelling;
-			paraList.add(new ParameterDecl(type, paraName, null));
+			paraList.add(new ParameterDecl(type, paraName, scanner.getPos()));
 			accept(TokenKind.ID);
 		}
 		return paraList;
@@ -199,22 +202,22 @@ public class Parser {
 		Reference ref = null;
 		switch(token.kind) {
 		case ID: 
-			ref = new IdRef(new Identifier(token), null);
+			ref = new IdRef(new Identifier(token, scanner.getPos()), scanner.getPos());
 			acceptIt();
 			while (token.kind == TokenKind.DOT) {
 				acceptIt();
-				Identifier id = new Identifier(token);
-				ref = new QualRef(ref, id, null);
+				Identifier id = new Identifier(token, scanner.getPos());
+				ref = new QualRef(ref, id, scanner.getPos());
 				accept(TokenKind.ID);
 			}
 			break;
 		case THIS:
-			ref = new ThisRef(null);
+			ref = new ThisRef(scanner.getPos());
 			acceptIt();
 			while (token.kind == TokenKind.DOT) {
 				acceptIt();
-				Identifier id = new Identifier(token);
-				ref = new QualRef(ref, id, null);
+				Identifier id = new Identifier(token, scanner.getPos());
+				ref = new QualRef(ref, id, scanner.getPos());
 				accept(TokenKind.ID);
 			}
 			break;
@@ -249,6 +252,7 @@ public class Parser {
 		Reference ref;
 		Expression idxExpr;
 		ExprList argList;
+		SourcePosition stmtPosn = scanner.getPos();
 		switch(token.kind) {
 		case LBRACE:
 			acceptIt();
@@ -257,41 +261,41 @@ public class Parser {
 				stmtList.add(parseStatement());
 			}
 			accept(TokenKind.RBRACE);
-			return new BlockStmt(stmtList, null);
+			return new BlockStmt(stmtList, stmtPosn);
 		case INT:
 			acceptIt();
-			type = new BaseType(TypeKind.INT, null); // int
+			type = new BaseType(TypeKind.INT, scanner.getPos()); // int
 			if (token.kind == TokenKind.LBRACKET) {
 				acceptIt();
 				accept(TokenKind.RBRACKET);
-				type = new ArrayType(type, null); // int[]
+				type = new ArrayType(type, scanner.getPos()); // int[]
 			}
 			varName = token.spelling;
 			accept(TokenKind.ID);
 			accept(TokenKind.ASSIGN);
 			resultExpr = parseExpression();
 			accept(TokenKind.SEMICOL);
-			variable = new VarDecl(type, varName, null);
-			return new VarDeclStmt(variable, resultExpr, null);
+			variable = new VarDecl(type, varName, stmtPosn);
+			return new VarDeclStmt(variable, resultExpr, stmtPosn);
 		case BOOLEAN:
 			acceptIt();
-			type = new BaseType(TypeKind.BOOLEAN, null);
+			type = new BaseType(TypeKind.BOOLEAN, scanner.getPos());
 			varName = token.spelling;
 			accept(TokenKind.ID);
 			accept(TokenKind.ASSIGN);
 			resultExpr = parseExpression();
 			accept(TokenKind.SEMICOL);
-			variable = new VarDecl(type, varName, null);
-			return new VarDeclStmt(variable, resultExpr, null);
+			variable = new VarDecl(type, varName, stmtPosn);
+			return new VarDeclStmt(variable, resultExpr, stmtPosn);
 		case RETURN:
 			acceptIt();
 			if (token.kind == TokenKind.SEMICOL) {
 				acceptIt();
-				return new ReturnStmt(null, null);
+				return new ReturnStmt(null, stmtPosn);
 			} else {
 				resultExpr = parseExpression();
 				accept(TokenKind.SEMICOL);
-				return new ReturnStmt(resultExpr, null);
+				return new ReturnStmt(resultExpr, stmtPosn);
 			}
 		case IF:
 			acceptIt();
@@ -302,16 +306,16 @@ public class Parser {
 			if (token.kind == TokenKind.ELSE) {
 				acceptIt();
 				elseStmt = parseStatement();
-				return new IfStmt(condition, thenStmt, elseStmt, null);
+				return new IfStmt(condition, thenStmt, elseStmt, stmtPosn);
 			}
-			return new IfStmt(condition, thenStmt, null);
+			return new IfStmt(condition, thenStmt, stmtPosn);
 		case WHILE:
 			acceptIt();
 			accept(TokenKind.LPAREN);
 			condition = parseExpression();
 			accept(TokenKind.RPAREN);
 			whileBody = parseStatement();
-			return new WhileStmt(condition, whileBody, null);
+			return new WhileStmt(condition, whileBody, stmtPosn);
 		case THIS:
 			ref = parseReference();
 			switch(token.kind) {
@@ -319,7 +323,7 @@ public class Parser {
 				acceptIt();
 				resultExpr = parseExpression();
 				accept(TokenKind.SEMICOL);
-				return new AssignStmt(ref, resultExpr, null);
+				return new AssignStmt(ref, resultExpr, stmtPosn);
 			case LBRACKET:
 				acceptIt();
 				idxExpr = parseExpression();
@@ -327,7 +331,7 @@ public class Parser {
 				accept(TokenKind.ASSIGN);
 				resultExpr = parseExpression();
 				accept(TokenKind.SEMICOL);
-				return new IxAssignStmt(ref, idxExpr, resultExpr, null);
+				return new IxAssignStmt(ref, idxExpr, resultExpr, stmtPosn);
 			case LPAREN:
 				acceptIt();
 				argList = new ExprList();
@@ -338,14 +342,14 @@ public class Parser {
 					accept(TokenKind.RPAREN);
 				}
 				accept(TokenKind.SEMICOL);
-				return new CallStmt(ref, argList, null);
+				return new CallStmt(ref, argList, stmtPosn);
 			default:
 				parseError("Invalid Term - expecting ASSIGN/LBRACKET/LPAREN but found " + token.kind);
 				return null;
 			}
 		case ID:
-			typeId = new Identifier(token);
-			ref = new IdRef(typeId, null);
+			typeId = new Identifier(token, scanner.getPos());
+			ref = new IdRef(typeId, scanner.getPos());
 			acceptIt();
 			switch(token.kind) {
 			case ID: // id id = Expression;
@@ -354,13 +358,13 @@ public class Parser {
 				accept(TokenKind.ASSIGN);
 				resultExpr = parseExpression();
 				accept(TokenKind.SEMICOL);
-				variable = new VarDecl(new ClassType(typeId, null), varName, null);
-				return new VarDeclStmt(variable, resultExpr, null);
+				variable = new VarDecl(new ClassType(typeId, scanner.getPos()), varName, stmtPosn);
+				return new VarDeclStmt(variable, resultExpr, stmtPosn);
 			case ASSIGN: // id = Expression;
 				acceptIt();
 				resultExpr = parseExpression();
 				accept(TokenKind.SEMICOL);
-				return new AssignStmt(ref, resultExpr, null);
+				return new AssignStmt(ref, resultExpr, stmtPosn);
 			case LPAREN: // id (Arglist?);
 				acceptIt();
 				argList = new ExprList();
@@ -371,7 +375,7 @@ public class Parser {
 					accept(TokenKind.RPAREN);
 				}
 				accept(TokenKind.SEMICOL);
-				return new CallStmt(ref, argList, null);
+				return new CallStmt(ref, argList, stmtPosn);
 			case LBRACKET: // id[] id = expression OR id[expression] = expression
 				acceptIt();
 				if (token.kind == TokenKind.RBRACKET) { // VarDeclStmt  id[] id = expression
@@ -381,30 +385,30 @@ public class Parser {
 					accept(TokenKind.ASSIGN);
 					resultExpr = parseExpression();
 					accept(TokenKind.SEMICOL);
-					type = new ClassType(typeId, null);
-					type = new ArrayType(type, null);                       // had these 4 lines combined, very hard to read -> separate out despite causing more lines
-					variable = new VarDecl(type, varName, null);
-					return new VarDeclStmt(variable, resultExpr, null);
+					type = new ClassType(typeId, scanner.getPos());
+					type = new ArrayType(type, scanner.getPos());                       // had these 4 lines combined, very hard to read -> separate out despite causing more lines
+					variable = new VarDecl(type, varName, stmtPosn);
+					return new VarDeclStmt(variable, resultExpr, stmtPosn);
 				} else {								// IxAssignStmt   id[expression] = expression
 					idxExpr = parseExpression();
 					accept(TokenKind.RBRACKET);
 					accept(TokenKind.ASSIGN);
 					resultExpr = parseExpression();
 					accept(TokenKind.SEMICOL);
-					return new IxAssignStmt(ref, idxExpr, resultExpr, null);
+					return new IxAssignStmt(ref, idxExpr, resultExpr, stmtPosn);
 				}
 			case DOT:
 				while (token.kind == TokenKind.DOT) {
 					acceptIt();
-					id = new Identifier(token);
+					id = new Identifier(token, scanner.getPos());
 					accept(TokenKind.ID);
-					ref = new QualRef(ref, id, null);
+					ref = new QualRef(ref, id, scanner.getPos());
 				}
 				if (token.kind == TokenKind.ASSIGN) { // id (.id)* = Expression;     AssignStmt
 					acceptIt();
 					resultExpr = parseExpression();
 					accept(TokenKind.SEMICOL);
-					return new AssignStmt(ref, resultExpr, null);
+					return new AssignStmt(ref, resultExpr, stmtPosn);
 				} else if (token.kind == TokenKind.LBRACKET) { // id (.id)*[Expression] = Expression;  IxAssignStmt
 					acceptIt();
 					idxExpr = parseExpression();
@@ -412,7 +416,7 @@ public class Parser {
 					accept(TokenKind.ASSIGN);
 					resultExpr = parseExpression();
 					accept(TokenKind.SEMICOL);
-					return new IxAssignStmt(ref, idxExpr, resultExpr, null);
+					return new IxAssignStmt(ref, idxExpr, resultExpr, stmtPosn);
 				} else if (token.kind == TokenKind.LPAREN) {   // id (.id)* (ArgList?);    CallStmt
 					acceptIt();
 					argList = new ExprList();
@@ -423,7 +427,7 @@ public class Parser {
 						accept(TokenKind.RPAREN);
 					}
 					accept(TokenKind.SEMICOL);
-					return new CallStmt(ref, argList, null);
+					return new CallStmt(ref, argList, stmtPosn);
 				} else {
 					parseError("Invalid Term - expecting ASSIGN/LBRACKET/LPAREN but found " + token.kind);
 					return null;
@@ -447,10 +451,10 @@ public class Parser {
 	private Expression parseDisjunction() throws SyntaxError {
 		Expression resultExpr = parseConjunction();
 		while (token.kind == TokenKind.OR) {
-			Operator op = new Operator(token);
+			Operator op = new Operator(token, scanner.getPos());
 			acceptIt();
 			Expression additionalExpr = parseConjunction();
-			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, scanner.getPos());
 		}
 		return resultExpr;
 	}
@@ -459,10 +463,10 @@ public class Parser {
 	private Expression parseConjunction() throws SyntaxError {
 		Expression resultExpr = parseEquality();
 		while (token.kind == TokenKind.AND) {
-			Operator op = new Operator(token);
+			Operator op = new Operator(token, scanner.getPos());
 			acceptIt();
 			Expression additionalExpr = parseEquality();
-			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, scanner.getPos());
 		}
 		return resultExpr;
 	}
@@ -471,10 +475,10 @@ public class Parser {
 	private Expression parseEquality() throws SyntaxError {
 		Expression resultExpr = parseRelational();
 		while (token.kind == TokenKind.EQUAL || token.kind == TokenKind.NOTEQUAL) {
-			Operator op = new Operator(token);
+			Operator op = new Operator(token, scanner.getPos());
 			acceptIt();
 			Expression additionalExpr = parseRelational();
-			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, scanner.getPos());
 		}
 		return resultExpr;
 	}
@@ -484,10 +488,10 @@ public class Parser {
 		Expression resultExpr = parseAdditive();
 		while (token.kind == TokenKind.LESSEQUAL || token.kind == TokenKind.LESS
 			  || token.kind == TokenKind.GREATER || token.kind == TokenKind.GREATEREQUAL) {
-			Operator op = new Operator(token);
+			Operator op = new Operator(token, scanner.getPos());
 			acceptIt();
 			Expression additionalExpr = parseAdditive();
-			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, scanner.getPos());
 		}
 		return resultExpr;
 	}
@@ -496,10 +500,10 @@ public class Parser {
 	private Expression parseAdditive() throws SyntaxError {
 		Expression resultExpr = parseMultiplicative();
 		while (token.kind == TokenKind.PLUS || token.kind == TokenKind.MINUS) {
-			Operator op = new Operator(token);
+			Operator op = new Operator(token, scanner.getPos());
 			acceptIt();
 			Expression additionalExpr = parseMultiplicative();
-			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, scanner.getPos());
 		}
 		return resultExpr;
 	}
@@ -508,10 +512,10 @@ public class Parser {
 	private Expression parseMultiplicative() throws SyntaxError {
 		Expression resultExpr = parseUnary();
 		while (token.kind == TokenKind.TIMES || token.kind == TokenKind.DIVIDE) {
-			Operator op = new Operator(token);
+			Operator op = new Operator(token, scanner.getPos());
 			acceptIt();
 			Expression additionalExpr = parseUnary();
-			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, null);
+			resultExpr = new BinaryExpr(op, resultExpr, additionalExpr, scanner.getPos());
 		}
 		return resultExpr;
 	}
@@ -520,9 +524,9 @@ public class Parser {
 	private Expression parseUnary() {
 		Expression resultExpr;
 		if (token.kind == TokenKind.MINUS || token.kind == TokenKind.NOT) {
-			Operator op = new Operator(token);
+			Operator op = new Operator(token, scanner.getPos());
 			acceptIt();
-			resultExpr = new UnaryExpr(op, parseUnary(), null);
+			resultExpr = new UnaryExpr(op, parseUnary(), scanner.getPos());
 			return resultExpr;
 		} else {
 			return parseEndExpression();
@@ -534,7 +538,7 @@ public class Parser {
                         | Reference [ Expression ]  
                         | Reference ( ArgumentList? )  
                         | ( Expression )  
-                        | num | true | false  
+                        | num | true | false | null
                         | new ( id() | int [ Expression ] | id [ Expression ] ) 
 
 	 */
@@ -549,7 +553,7 @@ public class Parser {
 				acceptIt();
 				resultExpr = parseExpression();
 				accept(TokenKind.RBRACKET);
-				return new IxExpr(ref, resultExpr, null);
+				return new IxExpr(ref, resultExpr, scanner.getPos());
 			} else if (token.kind == TokenKind.LPAREN) { // CallExpr
 				acceptIt(); 
 				ExprList argList = new ExprList();
@@ -559,9 +563,9 @@ public class Parser {
 					argList = parseArgumentList();
 					accept(TokenKind.RPAREN);
 				}
-				return new CallExpr(ref, argList, null);
+				return new CallExpr(ref, argList, scanner.getPos());
 			} else {
-				return new RefExpr(ref, null); // RefExpr
+				return new RefExpr(ref, scanner.getPos()); // RefExpr
 			}
 		case LPAREN:
 			acceptIt();
@@ -569,27 +573,31 @@ public class Parser {
 			accept(TokenKind.RPAREN);
 			return resultExpr;
 		case TRUE: case FALSE:
-			terminal = new BooleanLiteral(token);
+			terminal = new BooleanLiteral(token, scanner.getPos());
 			acceptIt();
-			return new LiteralExpr(terminal, null);
+			return new LiteralExpr(terminal, scanner.getPos());
 		case NUM:
-			terminal = new IntLiteral(token);
+			terminal = new IntLiteral(token, scanner.getPos());
 			acceptIt();
-			return new LiteralExpr(terminal, null);
+			return new LiteralExpr(terminal, scanner.getPos());
+		case NULL:
+			terminal = new NullLiteral(token, scanner.getPos());
+			acceptIt();
+			return new LiteralExpr(terminal, scanner.getPos());
 		case NEW:
 			acceptIt();
 			if (token.kind == TokenKind.ID) {
-				id = new Identifier(token);
+				id = new Identifier(token, scanner.getPos());
 				acceptIt();
 				if (token.kind == TokenKind.LPAREN) { // NewObjectExpr
 					acceptIt();
 					accept(TokenKind.RPAREN);
-					return new NewObjectExpr(new ClassType(id, null), null);
+					return new NewObjectExpr(new ClassType(id, scanner.getPos()), scanner.getPos());
 				} else if (token.kind == TokenKind.LBRACKET) { // NewArrayExpr
 					acceptIt();
 					resultExpr = parseExpression();
 					accept(TokenKind.RBRACKET);
-					return new NewArrayExpr(new ClassType(id, null), resultExpr, null);
+					return new NewArrayExpr(new ClassType(id, scanner.getPos()), resultExpr, scanner.getPos());
 				} else {
 					parseError("Invalid Term - expecting LPAREN or LBRACKET but found " + token.kind);
 					return null;
@@ -599,7 +607,7 @@ public class Parser {
 				accept(TokenKind.LBRACKET);
 				resultExpr = parseExpression();
 				accept(TokenKind.RBRACKET);
-				return new NewArrayExpr(new BaseType(TypeKind.INT, null), resultExpr, null);
+				return new NewArrayExpr(new BaseType(TypeKind.INT, scanner.getPos()), resultExpr, scanner.getPos());
 			} else {
 				parseError("Invalid Term - expecting ID or INT but found " + token.kind);
 				return null;

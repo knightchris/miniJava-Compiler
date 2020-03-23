@@ -14,13 +14,16 @@ public class Scanner {
 	private char currentChar;
 	private StringBuilder currentSpelling;
 	
+	
+	private int lineNum = 1;
+	private int colNum = 1;
+	
 	// true when end of line is found
 	private boolean eot = false; 
 
 	public Scanner(InputStream inputStream, ErrorReporter reporter) {
 		this.inputStream = inputStream;
 		this.reporter = reporter;
-
 		// initialize scanner state
 		readChar();
 	}
@@ -117,6 +120,8 @@ public class Scanner {
 				return TokenKind.FALSE;
 			case "new":
 				return TokenKind.NEW;
+			case "null":
+				return TokenKind.NULL;
 			default:
 				return TokenKind.ID;
 			}
@@ -262,6 +267,14 @@ public class Scanner {
 		try {
 			int c = inputStream.read();
 			currentChar = (char) c;
+			if (c == '\n') {
+				lineNum++;
+				colNum = 1;
+			} else if (c == '\t') {
+				colNum+=4;
+			} else {
+				colNum++;
+			}
 			if (c == -1) {
 				eot = true;
 			}
@@ -269,5 +282,9 @@ public class Scanner {
 			scanError("I/O Exception!");
 			eot = true;
 		}
+	}
+	
+	public SourcePosition getPos() {
+		return new SourcePosition(lineNum, colNum);
 	}
 }

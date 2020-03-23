@@ -10,7 +10,12 @@ import miniJava.SyntacticAnalyzer.SourcePosition;
 public abstract class AST {
 
   public AST (SourcePosition posn) {
-    this.posn = posn;
+    if (posn != null) {
+    	this.posn = posn;
+    } else {
+    	this.posn = new SourcePosition();
+    }
+	  
   }
   
   public String toString() {
@@ -24,4 +29,5 @@ public abstract class AST {
   public abstract <A,R> R visit(Visitor<A,R> v, A o);
 
   public SourcePosition posn;
+  public TypeDenoter type = null;
 }

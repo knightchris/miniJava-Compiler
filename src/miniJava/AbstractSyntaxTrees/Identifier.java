@@ -5,12 +5,16 @@
  */
 package miniJava.AbstractSyntaxTrees;
 
+import miniJava.SyntacticAnalyzer.SourcePosition;
 import miniJava.SyntacticAnalyzer.Token;
 
 public class Identifier extends Terminal {
+  
+  public Declaration decl;
 
-  public Identifier (Token t) {
+  public Identifier (Token t, SourcePosition posn) {
     super (t);
+    this.posn = posn;
   }
 
   public <A,R> R visit(Visitor<A,R> v, A o) {
@@ -18,3 +22,4 @@ public class Identifier extends Terminal {
   }
 
 }
+	

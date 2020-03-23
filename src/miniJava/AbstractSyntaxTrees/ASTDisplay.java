@@ -20,7 +20,7 @@ package miniJava.AbstractSyntaxTrees;
  */
 public class ASTDisplay implements Visitor<String,Object> {
 	
-	public static boolean showPosition = false;
+	public static boolean showPosition = true;
     
     /**
      * print text representation of AST to stdout
@@ -363,5 +363,10 @@ public class ASTDisplay implements Visitor<String,Object> {
     public Object visitBooleanLiteral(BooleanLiteral bool, String arg){
         show(arg, quote(bool.spelling) + " " + bool.toString());
         return null;
+    }
+    
+    public Object visitNullLiteral(NullLiteral nul, String arg) {
+    	show(arg, quote(nul.spelling) + " " + nul.toString());
+    	return null;
     }
 }

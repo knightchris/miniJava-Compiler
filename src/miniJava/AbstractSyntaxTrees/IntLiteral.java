@@ -5,12 +5,14 @@
  */
 package miniJava.AbstractSyntaxTrees;
 
+import miniJava.SyntacticAnalyzer.SourcePosition;
 import miniJava.SyntacticAnalyzer.Token;
 
 public class IntLiteral extends Terminal {
 
-  public IntLiteral(Token t) {
+  public IntLiteral(Token t, SourcePosition posn) {
     super(t);
+    this.posn = posn;
   }
  
   public <A,R> R visit(Visitor<A,R> v, A o) {
