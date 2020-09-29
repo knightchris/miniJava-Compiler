@@ -1,0 +1,32 @@
+miniJava Grammar
+
+Program ::= (ClassDeclaration)* eot  
+ClassDeclaration ::= class id { ( ( public | private )? static? 
+(Type id ( ; | ( ParameterList? ) {Statement*} )
+   |  void id ( ParameterList? ) {Statement*}  ) )* }      
+Type ::= ( int ( [] )? | id ( [] )? | Boolean )
+ParameterList ::= Type id ( , Type id)*  
+ArgumentList ::= Expression ( , Expression )*  
+Reference ::= ( id | this ) ( . id )*  
+Statement ::= { Statement* }  
+                        | ( int ( [] )? | id ( [] )? | Boolean ) id = Expression ;  
+                        | Reference = Expression ;  
+                        | Reference [ Expression ] = Expression ;  
+                        | Reference ( ArgumentList? ) ;  
+                        | return Expression? ;  
+                        | if ( Expression ) Statement (else Statement)?  
+                        | while ( Expression ) Statement  
+Expression ::= Disjunction 
+Disjunction ::= Conjunction ( || Conjunction)*
+Conjunction ::= Equality ( && Equality)*
+Equality ::= Relational ( ( == | != ) Relational)*
+Relational ::= Additive ( ( <= | < | > |  >= ) Additive)*
+Additive ::= Multiplicative ( ( + | - ) Multiplicative)*
+Multiplicative ::= Unary ( ( * | / ) Unary)*
+Unary ::= ( - | ! )* EndExpression 
+EndExpression ::= Reference 
+                        | Reference [ Expression ] 
+                        | Reference ( ArgumentList? ) 
+                        | ( Expression ) 
+                        | num | true | false | null
+                        | new ( id() | int [ Expression ] | id [ Expression ] )

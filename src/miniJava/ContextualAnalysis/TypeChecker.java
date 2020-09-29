@@ -67,6 +67,9 @@ public class TypeChecker implements Visitor<Object, TypeDenoter> {
 		} else if (typeOne instanceof ArrayType || typeTwo instanceof ArrayType) {
 			if (typeOne.typeKind == TypeKind.NULL || typeTwo.typeKind == TypeKind.NULL) {
 				return true;
+			} else if ((typeOne instanceof ArrayType) && ((ArrayType)typeOne).eltType.typeKind == typeTwo.typeKind 
+					|| (typeTwo instanceof ArrayType) && ((ArrayType)typeTwo).eltType.typeKind == typeOne.typeKind) {
+				return true;
 			} else if (!(typeOne instanceof ArrayType) || !(typeTwo instanceof ArrayType)) {
 				return false;
 			} else { // compare elt types
@@ -192,10 +195,19 @@ public class TypeChecker implements Visitor<Object, TypeDenoter> {
 		if (stmt.val instanceof RefExpr) {
 			RefExpr expr = ((RefExpr)stmt.val);
 			if (expr.ref.decl instanceof ClassDecl) {
+				if (expr.ref instanceof ThisRef) {
+					return varType;
+				}
 				reporter.reportError("*** line " + stmt.posn.getLine() + ": " + "column " + stmt.posn.getCol() + " Type Error - " + "cannot assign a class to variable");
 				return new BaseType(TypeKind.ERROR, stmt.posn);
 			} else if (expr.ref.decl instanceof MethodDecl) {
 				reporter.reportError("*** line " + stmt.posn.getLine() + ": " + "column " + stmt.posn.getCol() + " Type Error - " + "cannot assign a method to variable");
+				return new BaseType(TypeKind.ERROR, stmt.posn);
+			}
+		} else if (stmt.ref instanceof QualRef) {
+			QualRef qRef = (QualRef) stmt.ref;
+			if (qRef.ref.decl.type instanceof ArrayType && qRef.id.spelling.equals("length")) {
+				reporter.reportError("*** line " + stmt.posn.getLine() + ": " + "column " + stmt.posn.getCol() + " length field can only be read not assigned");
 				return new BaseType(TypeKind.ERROR, stmt.posn);
 			}
 		} else if (!checkTypeEquality(varType, exprType)) {

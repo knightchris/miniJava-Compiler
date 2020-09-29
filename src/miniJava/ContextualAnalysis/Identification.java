@@ -468,10 +468,22 @@ public class Identification implements Visitor<Object, Object> {
 		ref.ref.visit(this, null);
 		if (ref.ref.decl.type instanceof ClassType) { 
 			currentClassName = ((ClassType)ref.ref.decl.type).className.spelling;
+		} else if (ref.ref.decl.type instanceof ArrayType && !ref.id.spelling.equals("length")) {
+			reporter.reportError("*** line " + ref.posn.getLine() + ": " + "column " + ref.posn.getCol() + " tried to reference field of an array");
+			System.exit(4);
+		} else if (ref.ref.decl.type instanceof BaseType) {
+			if (ref.ref.decl.type.typeKind == TypeKind.INT) {
+				reporter.reportError("*** line " + ref.posn.getLine() + ": " + "column " + ref.posn.getCol() + " cannot qualify an integer");
+				System.exit(4);
+			}
 		}
-		ref.id.visit(this, null);
+		if (!(ref.ref.decl.type instanceof ArrayType && ref.id.spelling.equals("length"))) {
+			ref.id.visit(this, null);
+		} else {
+			ref.id.decl = new FieldDecl(false, false, new BaseType(TypeKind.INT, ref.ref.posn), "length", ref.ref.posn);
+		}
 		ref.decl = ref.id.decl;
-		currentClassName = null;
+		currentClassName = null; 
 		if (ref.ref instanceof IdRef) {
 			IdRef idRef = ((IdRef)ref.ref);
 			String identifierName = idRef.id.spelling;

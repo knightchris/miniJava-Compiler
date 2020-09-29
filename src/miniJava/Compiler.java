@@ -5,6 +5,7 @@ import java.io.FileNotFoundException;
 import java.io.InputStream;
 
 import miniJava.AbstractSyntaxTrees.*;
+import miniJava.CodeGenerator.CodeGenerator;
 import miniJava.ContextualAnalysis.Identification;
 import miniJava.ContextualAnalysis.TypeChecker;
 import miniJava.SyntacticAnalyzer.Parser;
@@ -26,6 +27,7 @@ public class Compiler {
 		Parser parser = new Parser(scanner, errorReporter);
 		Identification identifier = new Identification(errorReporter);
 		TypeChecker typeChecker = new TypeChecker(errorReporter);
+		CodeGenerator codeGenerator = new CodeGenerator(errorReporter);
 		
 		System.out.println("Syntactic analysis ... ");
 		AST ast = parser.parse();
@@ -39,6 +41,7 @@ public class Compiler {
 			//System.out.println("Valid miniJava program");
 			//ASTDisplay display = new ASTDisplay();
 			//display.showTree(ast);
+			codeGenerator.beginCodeGen(ast, args[0]);
 			System.exit(0);
 		}
 	}
